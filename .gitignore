@@ -50,7 +50,7 @@ e2b-template-*
 # IDE
 .vscode/
 .idea/
-.github/
+
 
 # Temporary files
 *.tmp
