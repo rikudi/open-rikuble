@@ -9,11 +9,11 @@ This document outlines the step-by-step implementation plan for transforming ope
 **Goal**: Set up development environment and core infrastructure
 
 #### Technical Tasks
-- [ ] Set up Supabase project with Finnish region
-- [ ] Configure authentication (Google Workspace, Microsoft 365)
-- [ ] Set up development database schema
-- [ ] Configure Vercel deployment with environment variables
-- [ ] Set up basic project structure adaptations
+- [x] Set up Supabase project with Finnish region
+- [x] Configure authentication (Google Workspace, Microsoft 365)
+- [x] Set up development database schema
+- [x] Configure Vercel deployment with environment variables
+- [x] Set up basic project structure adaptations
 
 #### Environment Setup
 ```bash
@@ -70,11 +70,11 @@ FIRECRAWL_API_KEY=...
 ```
 
 #### Deliverables
-- [ ] Supabase project configured with RLS policies
-- [ ] Authentication flow working
-- [ ] Basic database schema deployed
-- [ ] Development environment running
-- [ ] Initial branding (KoulutusBot colors, logo placeholder)
+- [x] Supabase project configured with RLS policies
+- [x] Authentication flow working
+- [x] Basic database schema deployed
+- [x] Development environment running
+- [x] Initial branding (KoulutusBot colors, logo placeholder)
 
 ---
 
@@ -82,17 +82,17 @@ FIRECRAWL_API_KEY=...
 **Goal**: Create a working educational content generator (focus on quizzes)
 
 #### Core Features
-- [ ] Adapt AI generation pipeline for educational content
-- [ ] Create quiz generation prompts with Finnish context
-- [ ] Basic quiz display and interaction
-- [ ] User authentication and credit system
-- [ ] Simple content storage in Supabase
+- [x] Adapt AI generation pipeline for educational content
+- [x] Create quiz generation prompts with Finnish context
+- [x] Basic quiz display and interaction
+- [x] User authentication and credit system
+- [x] Simple content storage in Supabase
 
 #### Technical Implementation
 
 ##### 1. Adapt AI Generation Pipeline
 ```typescript
-// lib/education/prompt-templates.ts
+// [x] lib/education/prompt-templates.ts
 export const QUIZ_GENERATION_PROMPT = `
 Generate an educational quiz in Finnish about {subject} for {grade_level}.
 
@@ -128,9 +128,9 @@ Output format:
 
 ##### 2. Quiz Components
 ```typescript
-// components/education/QuizGenerator.tsx - New component
-// components/education/QuizPlayer.tsx - Quiz taking interface
-// components/education/QuizResults.tsx - Results display
+// [x] components/education/QuizGenerator.tsx - New component
+// [x] components/education/QuizPlayer.tsx - Quiz taking interface
+// [ ] components/education/QuizResults.tsx - Results display
 ```
 
 ##### 3. Database Integration
@@ -146,22 +146,35 @@ export async function deductCredits(userId: string, action: string) {
 ```
 
 #### API Routes to Modify
-- [ ] `app/api/generate-ai-code-stream/route.ts` → Adapt for educational content
-- [ ] `app/api/education/generate-quiz/route.ts` → New quiz-specific endpoint
-- [ ] `app/api/education/save-content/route.ts` → Save generated content
+- [x] `app/api/generate-ai-code-stream/route.ts` → Adapt for educational content
+- [x] `app/api/education/generate-quiz/route.ts` → New quiz-specific endpoint
+- [x] `app/api/education/save-content/route.ts` → Save generated content
 
 #### UI Adaptations
-- [ ] Update `app/generation/page.tsx` for educational interface
-- [ ] Add subject/grade selection dropdowns
-- [ ] Replace website preview with quiz preview
-- [ ] Update branding from Firecrawl to KoulutusBot
+- [x] Update `app/generation/page.tsx` for educational interface
+- [x] Add subject/grade selection dropdowns
+- [x] Replace website preview with quiz preview
+- [x] Update branding from Firecrawl to KoulutusBot
 
 #### Testing Criteria
-- [ ] Can generate Finnish quiz about basic subjects
-- [ ] Quiz displays correctly with interactive answers
-- [ ] Credit system deducts properly
-- [ ] Content saves to Supabase
-- [ ] Authentication works with Google/Microsoft
+- [x] Can generate Finnish quiz about basic subjects
+- [x] Quiz displays correctly with interactive answers
+- [x] Credit system deducts properly
+- [x] Content saves to Supabase
+- [x] Authentication works with Google/Microsoft
+
+---
+
+### Phase 1.5: Public Landing Page (Week 6-7)
+**Goal**: Create a public-facing landing page to attract new users.
+
+#### Features
+- [ ] Design a new public landing page for unauthenticated users.
+- [ ] Implement the landing page at the root URL (`/`).
+- [ ] Clearly explain KoulutusBot's value proposition, features, and target audience.
+- [ ] Include sections for use cases (teachers, students, etc.) and pricing/credit system.
+- [ ] Add clear Call-to-Action (CTA) buttons for signing up or logging in.
+- [ ] Ensure the page is fully responsive and uses the KoulutusBot branding.
 
 ---
 

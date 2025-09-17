@@ -9,10 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, BookOpen, FileQuestion, Presentation, PenTool, Coins } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Loader2, BookOpen, FileQuestion, Presentation, PenTool, Coins, Save, CheckCircle } from 'lucide-react';
 import { SUBJECTS, GRADE_LEVELS, CONTENT_TYPES } from '@/lib/education/prompt-templates';
-import { Quiz } from '@/lib/education/content-parser';
 
 interface ContentGeneratorProps {
     onContentGenerated?: (content: any, contentType: string) => void;
@@ -26,6 +25,12 @@ interface GenerationState {
     error: string | null;
 }
 
+interface SaveState {
+    isSaving: boolean;
+    isSaved: boolean;
+    error: string | null;
+}
+
 export function ContentGenerator({ onContentGenerated, userCredits = 0 }: ContentGeneratorProps) {
     const [contentType, setContentType] = useState<string>('quiz');
     const [subject, setSubject] = useState<string>('');
@@ -34,10 +39,18 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
     const [customTopic, setCustomTopic] = useState<string>('');
     const [additionalInstructions, setAdditionalInstructions] = useState<string>('');
 
+    const [generatedData, setGeneratedData] = useState<any | null>(null);
+
     const [generationState, setGenerationState] = useState<GenerationState>({
         isGenerating: false,
         progress: 0,
         status: '',
+        error: null
+    });
+
+    const [saveState, setSaveState] = useState<SaveState>({
+        isSaving: false,
+        isSaved: false,
         error: null
     });
 
@@ -51,14 +64,18 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
         }
     };
 
+    const requiredCredits = CONTENT_TYPES[contentType as keyof typeof CONTENT_TYPES]?.credits || 0;
+    const hasEnoughCredits = userCredits >= requiredCredits;
+
     const canGenerate = () => {
-        const requiredCredits = CONTENT_TYPES[contentType as keyof typeof CONTENT_TYPES]?.credits || 0;
-        return subject && gradeLevel && userCredits >= requiredCredits;
+        return subject && gradeLevel && hasEnoughCredits;
     };
 
     const handleGenerate = async () => {
         if (!canGenerate()) return;
 
+        setGeneratedData(null);
+        setSaveState({ isSaving: false, isSaved: false, error: null });
         setGenerationState({
             isGenerating: true,
             progress: 0,
@@ -91,8 +108,6 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
             const reader = response.body?.getReader();
             if (!reader) throw new Error('No response stream available');
 
-            let generatedContent = null;
-
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
@@ -107,32 +122,16 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
 
                             switch (data.type) {
                                 case 'status':
-                                    setGenerationState(prev => ({
-                                        ...prev,
-                                        status: data.message,
-                                        progress: Math.min(prev.progress + 20, 90)
-                                    }));
+                                    setGenerationState(prev => ({ ...prev, status: data.message, progress: Math.min(prev.progress + 20, 90) }));
                                     break;
-
                                 case 'content':
-                                    setGenerationState(prev => ({
-                                        ...prev,
-                                        progress: Math.min(prev.progress + 5, 85)
-                                    }));
+                                    setGenerationState(prev => ({ ...prev, progress: Math.min(prev.progress + 5, 85) }));
                                     break;
-
                                 case 'complete':
-                                    generatedContent = data.content;
-                                    setGenerationState(prev => ({
-                                        ...prev,
-                                        status: 'Sisältö luotu onnistuneesti!',
-                                        progress: 100
-                                    }));
-
-                                    // Call the callback with generated content
+                                    setGeneratedData(data.content);
+                                    setGenerationState(prev => ({ ...prev, status: 'Sisältö luotu onnistuneesti!', progress: 100 }));
                                     onContentGenerated?.(data.content, contentType);
                                     break;
-
                                 case 'error':
                                     throw new Error(data.message);
                             }
@@ -144,24 +143,52 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
             }
 
         } catch (error) {
-            console.error('Generation error:', error);
-            setGenerationState(prev => ({
-                ...prev,
-                error: error instanceof Error ? error.message : 'Tuntematon virhe',
-                isGenerating: false
-            }));
+            const errorMessage = error instanceof Error ? error.message : 'Tuntematon virhe';
+            setGenerationState(prev => ({ ...prev, error: errorMessage, isGenerating: false }));
         } finally {
             setTimeout(() => {
-                setGenerationState(prev => ({
-                    ...prev,
-                    isGenerating: false
-                }));
+                setGenerationState(prev => ({ ...prev, isGenerating: false }));
             }, 1000);
         }
     };
 
-    const requiredCredits = CONTENT_TYPES[contentType as keyof typeof CONTENT_TYPES]?.credits || 0;
-    const hasEnoughCredits = userCredits >= requiredCredits;
+    const handleSaveContent = async () => {
+        if (!generatedData) return;
+
+        setSaveState({ isSaving: true, isSaved: false, error: null });
+
+        try {
+            const contentDetails = {
+                contentType,
+                title: generatedData.metadata.title || `${subject} - ${contentType}`,
+                description: `Generated ${contentType} for ${subject}`,
+                subject,
+                gradeLevel,
+                language,
+                curriculumStandards: { oph: 'tbd' }, // Placeholder
+                contentData: generatedData,
+            };
+
+            const response = await fetch('/api/education/save-content', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contentDetails, creditCost: requiredCredits }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Tallennus epäonnistui');
+            }
+
+            const result = await response.json();
+            setSaveState({ isSaving: false, isSaved: true, error: null });
+            // Optionally, update user credits display locally
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Tuntematon virhe';
+            setSaveState({ isSaving: false, isSaved: false, error: errorMessage });
+        }
+    };
 
     return (
         <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -177,39 +204,29 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-
-                    {/* Content Type Selection */}
                     <div className="space-y-3">
                         <Label>Sisältötyyppi</Label>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             {Object.entries(CONTENT_TYPES).map(([type, config]) => (
                                 <Card
                                     key={type}
-                                    className={`cursor-pointer transition-all hover:shadow-md ${contentType === type ? 'ring-2 ring-primary' : ''
-                                        }`}
+                                    className={`cursor-pointer transition-all hover:shadow-md ${contentType === type ? 'ring-2 ring-primary' : ''}`}
                                     onClick={() => setContentType(type)}
                                 >
                                     <CardContent className="p-4 text-center">
-                                        <div className="flex justify-center mb-2">
-                                            {getContentTypeIcon(type)}
-                                        </div>
+                                        <div className="flex justify-center mb-2">{getContentTypeIcon(type)}</div>
                                         <div className="text-sm font-medium">{config.description}</div>
-                                        <Badge variant="secondary" className="mt-1 text-xs">
-                                            {config.credits} krediittiä
-                                        </Badge>
+                                        <Badge variant="secondary" className="mt-1 text-xs">{config.credits} krediittiä</Badge>
                                     </CardContent>
                                 </Card>
                             ))}
                         </div>
                     </div>
 
-                    {/* Subject Selection */}
                     <div className="space-y-2">
                         <Label htmlFor="subject">Oppiaine</Label>
                         <Select value={subject} onValueChange={setSubject}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Valitse oppiaine" />
-                            </SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder="Valitse oppiaine" /></SelectTrigger>
                             <SelectContent>
                                 {Object.entries(SUBJECTS).map(([key, value]) => (
                                     <SelectItem key={key} value={key}>{value}</SelectItem>
@@ -218,13 +235,10 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
                         </Select>
                     </div>
 
-                    {/* Grade Level Selection */}
                     <div className="space-y-2">
                         <Label htmlFor="gradeLevel">Vuosiluokka / Taso</Label>
                         <Select value={gradeLevel} onValueChange={setGradeLevel}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Valitse vuosiluokka" />
-                            </SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder="Valitse vuosiluokka" /></SelectTrigger>
                             <SelectContent>
                                 {Object.entries(GRADE_LEVELS).map(([key, value]) => (
                                     <SelectItem key={key} value={key}>{value}</SelectItem>
@@ -233,13 +247,10 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
                         </Select>
                     </div>
 
-                    {/* Language Selection */}
                     <div className="space-y-2">
                         <Label htmlFor="language">Kieli</Label>
                         <Select value={language} onValueChange={setLanguage}>
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="fi">Suomi</SelectItem>
                                 <SelectItem value="sv">Ruotsi</SelectItem>
@@ -248,79 +259,53 @@ export function ContentGenerator({ onContentGenerated, userCredits = 0 }: Conten
                         </Select>
                     </div>
 
-                    {/* Custom Topic */}
                     <div className="space-y-2">
                         <Label htmlFor="customTopic">Tarkka aihe (valinnainen)</Label>
-                        <Input
-                            id="customTopic"
-                            value={customTopic}
-                            onChange={(e) => setCustomTopic(e.target.value)}
-                            placeholder="Esim. 'Suomen sisällissota' tai 'Pythagoraan lause'"
-                        />
+                        <Input id="customTopic" value={customTopic} onChange={(e) => setCustomTopic(e.target.value)} placeholder="Esim. 'Suomen sisällissota' tai 'Pythagoraan lause'" />
                     </div>
 
-                    {/* Additional Instructions */}
                     <div className="space-y-2">
                         <Label htmlFor="instructions">Lisäohjeet (valinnainen)</Label>
-                        <Textarea
-                            id="instructions"
-                            value={additionalInstructions}
-                            onChange={(e) => setAdditionalInstructions(e.target.value)}
-                            placeholder="Erityisvaatimukset, vaikeustaso, painotukset..."
-                            rows={3}
-                        />
+                        <Textarea id="instructions" value={additionalInstructions} onChange={(e) => setAdditionalInstructions(e.target.value)} placeholder="Erityisvaatimukset, vaikeustaso, painotukset..." rows={3} />
                     </div>
 
-                    {/* Error Display */}
-                    {generationState.error && (
-                        <Alert variant="destructive">
-                            <AlertDescription>{generationState.error}</AlertDescription>
-                        </Alert>
-                    )}
-
-                    {/* Credit Warning */}
+                    {generationState.error && <Alert variant="destructive"><AlertDescription>{generationState.error}</AlertDescription></Alert>}
+                    
                     {!hasEnoughCredits && subject && gradeLevel && (
-                        <Alert>
-                            <AlertDescription>
-                                Tarvitset {requiredCredits} krediittiä tämän sisällön luomiseen.
-                                Sinulla on {userCredits} krediittiä.
-                            </AlertDescription>
-                        </Alert>
+                        <Alert><AlertDescription>Tarvitset {requiredCredits} krediittiä tämän sisällön luomiseen. Sinulla on {userCredits} krediittiä.</AlertDescription></Alert>
                     )}
 
-                    {/* Generation Progress */}
                     {generationState.isGenerating && (
                         <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                <span className="text-sm">{generationState.status}</span>
-                            </div>
+                            <div className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">{generationState.status}</span></div>
                             <Progress value={generationState.progress} />
                         </div>
                     )}
 
-                    {/* Generate Button */}
-                    <Button
-                        onClick={handleGenerate}
-                        disabled={!canGenerate() || generationState.isGenerating}
-                        className="w-full"
-                        size="lg"
-                    >
+                    <Button onClick={handleGenerate} disabled={!canGenerate() || generationState.isGenerating} className="w-full" size="lg">
                         {generationState.isGenerating ? (
-                            <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Luodaan sisältöä...
-                            </>
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Luodaan sisältöä...</>
                         ) : (
-                            <>
-                                {getContentTypeIcon(contentType)}
-                                <span className="ml-2">
-                                    Luo {CONTENT_TYPES[contentType as keyof typeof CONTENT_TYPES]?.description}
-                                    ({requiredCredits} krediittiä)
-                                </span>
-                            </>
+                            <>{getContentTypeIcon(contentType)}<span className="ml-2">Luo {CONTENT_TYPES[contentType as keyof typeof CONTENT_TYPES]?.description} ({requiredCredits} krediittiä)</span></>
                         )}
                     </Button>
+
+                    {generatedData && !saveState.isSaved && (
+                        <div className="pt-4 space-y-4 border-t">
+                            <h3 className="text-lg font-medium">Tallennus</h3>
+                            {saveState.error && <Alert variant="destructive"><AlertDescription>{saveState.error}</AlertDescription></Alert>}
+                            <Button onClick={handleSaveContent} disabled={saveState.isSaving} className="w-full">
+                                {saveState.isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Tallennetaan...</> : <><Save className="w-4 h-4 mr-2" />Tallenna sisältö</>}</Button>
+                        </div>
+                    )}
+
+                    {saveState.isSaved && (
+                        <Alert variant="success">
+                            <CheckCircle className="h-4 w-4" />
+                            <AlertTitle>Onnistui!</AlertTitle>
+                            <AlertDescription>Sisältö on tallennettu onnistuneesti.</AlertDescription>
+                        </Alert>
+                    )}
                 </CardContent>
             </Card>
         </div>

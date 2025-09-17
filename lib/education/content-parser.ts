@@ -284,8 +284,63 @@ export function parseEducationalContent(response: string, contentType: string) {
     case 'course':
       return parseCourseFromXML(response);
     // Add more parsers as needed
+    case 'exercise':
+      return parseExerciseSetFromXML(response);
     default:
       return null;
+  }
+}
+
+export function parseExerciseSetFromXML(xmlContent: string): ExerciseSet | null {
+  try {
+    const exerciseSetMatch = xmlContent.match(/<exerciseset>([\s\S]*?)<\/exerciseset>/);
+    if (!exerciseSetMatch) return null;
+
+    const exerciseSetXML = exerciseSetMatch[1];
+
+    const titleMatch = exerciseSetXML.match(/<title>(.*?)<\/title>/);
+    const subjectMatch = exerciseSetXML.match(/<subject>(.*?)<\/subject>/);
+    const gradeLevelMatch = exerciseSetXML.match(/<grade_level>(.*?)<\/grade_level>/);
+    const languageMatch = exerciseSetXML.match(/<language>(.*?)<\/language>/);
+
+    const exercisesMatch = exerciseSetXML.match(/<exercises>([\s\S]*?)<\/exercises>/);
+    const exercises: Exercise[] = [];
+
+    if (exercisesMatch) {
+      const exercisePattern = /<exercise id="(\d+)">([\s\S]*?)<\/exercise>/g;
+      let exerciseMatch;
+      while ((exerciseMatch = exercisePattern.exec(exercisesMatch[1])) !== null) {
+        const exerciseId = parseInt(exerciseMatch[1]);
+        const exerciseContent = exerciseMatch[2];
+
+        const typeMatch = exerciseContent.match(/<type>(.*?)<\/type>/);
+        const questionMatch = exerciseContent.match(/<question>(.*?)<\/question>/);
+        const solutionMatch = exerciseContent.match(/<solution>(.*?)<\/solution>/);
+
+        if (questionMatch && solutionMatch) {
+          exercises.push({
+            id: exerciseId,
+            type: typeMatch ? typeMatch[1].trim() : 'short_answer',
+            question: questionMatch[1].trim(),
+            solution: solutionMatch[1].trim(),
+          });
+        }
+      }
+    }
+
+    return {
+      metadata: {
+        title: titleMatch ? titleMatch[1].trim() : '',
+        subject: subjectMatch ? subjectMatch[1].trim() : '',
+        grade_level: gradeLevelMatch ? gradeLevelMatch[1].trim() : '',
+        language: languageMatch ? languageMatch[1].trim() : 'fi',
+        curriculum_standards: [],
+      },
+      exercises,
+    };
+  } catch (error) {
+    console.error('Error parsing exercise set XML:', error);
+    return null;
   }
 }
 
